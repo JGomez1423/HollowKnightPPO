@@ -168,9 +168,9 @@ class HKEnv(gym.Env):
             # print(" rojo: \n", enemy_hp_bar_red)
             # print("primera resta: \n", enemy_hp_bar[..., 0])
             # print("segunda resta: \n", enemy_hp_bar[..., 1])
-            print(len(enemy_hp_bar_red))  
+            #print(len(enemy_hp_bar_red))  
             enemy_hp = enemy_hp.sum() + first_pixel_hp + second_pixel_hp
-            print(enemy_hp)
+            #print(enemy_hp)
             if enemy_hp == 0:
                 enemy_hp = len(enemy_hp_bar)
             enemy_hp /= len(enemy_hp_bar)

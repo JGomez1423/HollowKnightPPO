@@ -13,7 +13,8 @@ cudnn.benchmark = True
 
 def get_model(env: gym.Env, n_frames: int):
     m = models.SimpleExtractor(env.observation_space.shape, n_frames)
-    m = models.DuelingMLP(m, env.action_space.n, noisy=True)
+    m = models.ActorNetwork(m,env.action_space.n, m.units,0.001)
+    #m = models.DuelingMLP(m, env.action_space.n, noisy=False)
     return m.to(DEVICE)
 
 
@@ -46,11 +47,14 @@ def train(dqn):
               f'total rewards {rew}, loss {loss}', sep='\n')
         print()
 
+        
+
 
 def main():
     n_frames = 4
     env = hkenv.HKEnv((192, 192), w1=0.8, w2=0.8, w3=-0.0001)
     m = get_model(env, n_frames)
+    print("env.action_space.n: ", env.action_space.n)
     replay_buffer = buffer.MultistepBuffer(50000, n=10, gamma=0.99)
     dqn = trainer.Trainer(env=env, replay_buffer=replay_buffer,
                           n_frames=n_frames, gamma=0.99, eps=0.,

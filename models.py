@@ -3,7 +3,9 @@ import numpy as np
 from torch import nn
 from torch.nn import functional as F
 from torchvision.ops.misc import SqueezeExcitation as SE
-
+import torch.optim as optim
+import os
+from torch.distributions.categorical import Categorical
 
 def param_init(m):  # code adapted from torchvision VGG class
     if isinstance(m, nn.Conv2d):
@@ -240,20 +242,14 @@ class DuelingMLP(AbstractFullyConnected):
     def __init__(self, extractor: nn.Module, n_out: int, noisy=False):
         super(DuelingMLP, self).__init__(extractor, n_out, noisy)
         self.linear_val = self.linear_cls(extractor.units, 320)
-        self.linear_adv = self.linear_cls(extractor.units, 320)
-        self.val = self.linear_cls(320, 1)
         self.adv = self.linear_cls(320, n_out)
 
         if noisy:
-            self.noisy.append(self.linear_val)
             self.noisy.append(self.linear_adv)
-            self.noisy.append(self.val)
             self.noisy.append(self.adv)
 
         param_init(self.linear_adv)
-        param_init(self.linear_val)
         param_init(self.adv)
-        param_init(self.val)
 
     def forward(self, x, adv_only=False, **kwargs):
         x = self.extractor(x)
@@ -261,10 +257,69 @@ class DuelingMLP(AbstractFullyConnected):
         adv = self.linear_adv(x)
         adv = self.act(adv)
         adv = self.adv(adv)
-        if adv_only:
-            return adv
-        val = self.linear_val(x)
-        val = self.act(val)
-        val = self.val(val)
-        x = val + adv - adv.mean(dim=1, keepdim=True)
-        return x
+        return adv
+
+
+
+class ActorNetwork(nn.Module):
+    def __init__(self,extractor: nn.Module, n_actions, input_dims, alpha,
+            fc1_dims=256, fc2_dims=256, chkpt_dir='tmp/ppo'):
+        super(ActorNetwork, self).__init__()
+        self.extractor = extractor
+        self.checkpoint_file = os.path.join(chkpt_dir, 'actor_torch_ppo')
+        self.actor = nn.Sequential(
+                nn.Linear(input_dims, fc1_dims),
+                nn.ReLU(),
+                nn.Linear(fc1_dims, fc2_dims),
+                nn.ReLU(),
+                nn.Linear(fc2_dims, n_actions),
+                nn.Softmax(dim=-1)
+        )
+
+        self.optimizer = optim.Adam(self.parameters(), lr=alpha)
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, state):
+        state = self.extractor(state)
+        state = torch.flatten(state,1)
+        dist = self.actor(state)
+        dist = Categorical(dist)
+        
+        return dist
+
+    def save_checkpoint(self):
+        torch.save(self.state_dict(), self.checkpoint_file)
+
+    def load_checkpoint(self):
+        self.load_state_dict(torch.load(self.checkpoint_file))
+
+class CriticNetwork(nn.Module):
+    def __init__(self, extractor: nn.Module, input_dims, alpha, fc1_dims=256, fc2_dims=256,
+            chkpt_dir='tmp/ppo'):
+        super(CriticNetwork, self).__init__()
+        self.extractor = extractor
+        self.checkpoint_file = os.path.join(chkpt_dir, 'critic_torch_ppo')
+        self.critic = nn.Sequential(
+                nn.Linear(*input_dims, fc1_dims),
+                nn.ReLU(),
+                nn.Linear(fc1_dims, fc2_dims),
+                nn.ReLU(),
+                nn.Linear(fc2_dims, 1)
+        )
+
+        self.optimizer = optim.Adam(self.parameters(), lr=alpha)
+        self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def forward(self, state):
+        state = self.extractor(state)
+        state = torch.flatten(state,1)
+        value = self.critic(state)
+        return value
+
+    def save_checkpoint(self):
+        torch.save(self.state_dict(), self.checkpoint_file)
+
+    def load_checkpoint(self):
+        self.load_state_dict(torch.load(self.checkpoint_file))

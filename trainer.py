@@ -93,7 +93,7 @@ class Trainer:
     def _warmup(self, model):
         model(torch.rand((1, self.n_frames) + self.env.observation_space.shape,
                          dtype=torch.float32,
-                         device=self.device)).detach().cpu().numpy()
+                         device=self.device))
 
     @torch.no_grad()
     def get_action(self, obs):
@@ -256,6 +256,7 @@ class Trainer:
         assert not save_loc.endswith('\\')
         save_loc = save_loc if save_loc.endswith('/') else f'{save_loc}/'
         for i in range(n_episodes):
+            cont = 0
             fname = f'{save_loc}{i}.npz'
             if os.path.exists(fname):
                 print(f'{os.path.abspath(fname)} already exists, skipping')
@@ -264,6 +265,9 @@ class Trainer:
             obs_lst = [obs]
             action_lst, rew_lst, done_lst = [], [], []
             while True:
+                cont +=1
+                if cont>50:
+                    break
                 t = time.time()
                 action = self.env.action_space.sample()
                 # predict with model to simulate the time taken in real episode
