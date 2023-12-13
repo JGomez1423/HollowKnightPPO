@@ -4,3 +4,5 @@ saved/16*
 **/__pycache__/
 **/*npz
 **/*npy
+codigo_señor.py
+tmp/*

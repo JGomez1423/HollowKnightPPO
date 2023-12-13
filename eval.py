@@ -16,24 +16,40 @@ cudnn.benchmark = True
 
 
 def get_model(env: gym.Env, n_frames: int):
-    m = models.SimpleExtractor(env.observation_space.shape, n_frames)
-    m = models.DuelingMLP(m, env.action_space.n, True)
-    return m.to(DEVICE)
+    actor = models.SimpleExtractor(env.observation_space.shape, n_frames)
+    actor = models.ActorNetwork(actor,env.action_space.n, actor.units,0.0003)
+    return actor.to(DEVICE)
+
+
+@staticmethod
+def standardize(obs):
+    # values found from empirical data
+    obs -= 92.54949702814011
+    obs /= 57.94090462506912
+    return obs
+
+def choose_action(obs, actor):
+    state = torch.as_tensor(obs, dtype=torch.float32,
+                              device='cuda')
+
+    standardize(state)
+    dist = actor(state)
+    action = dist.sample()
+    action = torch.squeeze(action).item()
+    return action
+
 
 
 @torch.no_grad()
 def main():
     n_frames = 4
-    env = hkenv.HKEnv((192, 192), w1=1., w2=1., w3=0.)
-    m = get_model(env, n_frames)
-    m.eval()
-    fname = sorted(os.listdir('saved'))[-1]
-    print(f'evaluating {fname}')
-    m.load_state_dict(torch.load(f'cerebro/latestmodel.pt'))  # replace this path with your weight file
-    m(torch.ones((1, n_frames) + env.observation_space.shape,
-                 dtype=torch.float32, device=DEVICE))
-    m.noise_mode(False)
-    for i in range(5):
+    env = hkenv.HKEnv((192, 192), w1=0.8, w2=0.8, w3=0.0001)
+    actor_network = get_model(env, n_frames)
+    actor_network.eval()
+    print("Modelo cargado exitosamente.")
+    actor_network.load_state_dict(torch.load(f'tmp/ppo/actor_torch_ppo.pth'))  # replace this path with your weight file
+    n_games = 5
+    for i in range(n_games):
         initial, _ = env.reset()
         stacked_obs = deque(
             (initial for _ in range(n_frames * 2 - 1)),
@@ -41,16 +57,12 @@ def main():
         )
 
         while True:
-
             t = time.time()
             obs_tuple = tuple(stacked_obs)
+            
             obs = np.array([obs_tuple], dtype=np.float32)
-            obs = torch.as_tensor(obs, dtype=torch.float32,
-                                  device=DEVICE)
-            trainer.Trainer.standardize(obs)
-            pred = m(obs).detach().cpu().numpy()[0]
-            print(pred)
-            action = np.argmax(pred)
+            #print("Dimensiones de entrada:", obs.shape)
+            action = choose_action(obs, actor_network)
             obs_next, rew, done, _, _ = env.step(action)
             print(action, rew)
             stacked_obs.append(obs_next)

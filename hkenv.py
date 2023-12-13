@@ -57,6 +57,8 @@ class HKEnv(gym.Env):
     
     ACTIONS = [Move, Jump, Attack]
 
+
+   
     def __init__(self, obs_shape=(160, 160), w1=1., w2=1., w3=0.002):
         self.monitor = self._find_window()
         self.holding = []
@@ -197,6 +199,7 @@ class HKEnv(gym.Env):
         return obs, knight_hp, enemy_hp
 
     def step(self, actions):
+        val_win = 10
         action_rew = 0
         if actions == self.prev_action:
             action_rew -= 2e-5
@@ -227,6 +230,7 @@ class HKEnv(gym.Env):
         if win:  # extra reward for winning based on conditions
             time_rew = 5. / (time.time() - self._episode_time)
             reward += knight_hp / 40. + time_rew
+            + val_win
         elif lose:
             print("lose")
             reward -= enemy_hp / 5.
@@ -252,18 +256,22 @@ class HKEnv(gym.Env):
         # wait for loading screen
         ready = False
         while True:
-            obs, _, _ = self.observe()
-            is_loading = (obs < 20).sum() < 10
-            if ready and not is_loading:
-                break
-            else:
-                ready = is_loading
+            time.sleep(4.8)
+            print("empezó")
+            break
+            # obs, _, _ = self.observe()
+            # is_loading = (obs < 20).sum() < 10
+            # print((obs<20).sum())
+            # if ready and not is_loading:
+            #     break
+            # else:
+            #     ready = is_loading
         self._step_actions([Move.HOLD_RIGHT])
         # forcefully move right for a short time
         # so the knight can have better chance explore right side
         time.sleep(0.7)
         self.cleanup()
-        time.sleep(0.5)
+        #time.sleep(0.2)
         self.prev_knight_hp, self.prev_enemy_hp = 9, 1.
         self._episode_time = time.time()
         return self.observe()[0], None
@@ -283,3 +291,7 @@ class HKEnv(gym.Env):
         self._timer = None
         self._episode_time = None
         gc.collect()
+
+    def pause(self):
+        pyautogui.press('escape')
+        
